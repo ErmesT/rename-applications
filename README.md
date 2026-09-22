@@ -4,6 +4,16 @@ A small Zenity-based utility for creating per-user desktop-entry overrides,
 so application names can be changed in the launcher without modifying files
 owned by system packages.
 
+This utility is designed primarily for the Omarchy desktop environment. It
+uses the standard `.desktop` application entries and should also work on
+other desktop environments that use them. After a rename, it attempts to run
+`omarchy menu refresh`; that refresh is optional and is safely ignored when
+Omarchy is not installed.
+
+No specific Omarchy version is pinned. The utility is intended for current
+Omarchy installations and relies on the `omarchy menu refresh` command when
+available.
+
 ## Build locally
 
 From this directory:
