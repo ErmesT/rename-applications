@@ -8,7 +8,7 @@ license=('MIT')
 depends=('bash' 'zenity' 'desktop-file-utils')
 optdepends=('omarchy: refresh the Omarchy launcher menu')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('72ce91b70262a286bc759e089f8e6cae06f1eda2b84f44c0a93bc7a6f188f1c1')
 
 package() {
     install -Dm755 rename-applications \
