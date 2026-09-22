@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Rename Applications
+Comment=Change names shown in the application launcher
+Exec=rename-applications
+Icon=preferences-desktop-apps
+Terminal=false
+Categories=Settings;

@@ -1,0 +1,15 @@
+pkgbase = rename-applications
+	pkgdesc = Rename applications shown in the desktop launcher
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/ErmesT/rename-applications
+	arch = any
+	license = MIT
+	depends = bash
+	depends = zenity
+	depends = desktop-file-utils
+	optdepends = omarchy: refresh the Omarchy launcher menu
+	source = rename-applications-1.0.0.tar.gz::https://github.com/ErmesT/rename-applications/releases/download/v1.0.0/rename-applications-1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = rename-applications

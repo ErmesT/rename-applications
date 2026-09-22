@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+user_app_dir="$data_home/applications"
+declare -A app_source=()
+declare -A default_source=()
+declare -A app_name=()
+declare -A seen=()
+
+desktop_key() {
+  local key=$1 file=$2 line
+
+  while IFS= read -r line; do
+    case "$line" in
+      "$key="*) printf '%s\n' "${line#*=}"; return 0 ;;
+    esac
+  done < "$file"
+
+  return 1
+}
+
+show_error() {
+  zenity --error --title="Rename Applications" --text="$1"
+}
+
+refresh_menu() {
+  update-desktop-database "$user_app_dir"
+  omarchy menu refresh >/dev/null 2>&1 || true
+}
+
+scan_directory() {
+  local directory=$1 file id name hidden no_display
+
+  [ -d "$directory" ] || return 0
+
+  for file in "$directory"/*.desktop; do
+    [ -f "$file" ] || continue
+    id=${file##*/}
+
+    if [ "$directory" != "$user_app_dir" ] && [ -z "${default_source[$id]+set}" ]; then
+      default_source[$id]=$file
+    fi
+
+    [ -z "${seen[$id]+set}" ] || continue
+    seen[$id]=1
+    hidden=$(desktop_key Hidden "$file" || true)
+    no_display=$(desktop_key NoDisplay "$file" || true)
+    [ "$hidden" != "true" ] || continue
+    [ "$no_display" != "true" ] || continue
+
+    name=$(desktop_key Name "$file" || true)
+    [ -n "$name" ] || continue
+    app_source[$id]=$file
+    app_name[$id]=$name
+  done
+}
+
+rename_entry() {
+  local id=$1 new_name=$2 source target temporary escaped_name
+
+  [ -n "$new_name" ] || return 0
+  source=${app_source[$id]}
+  target="$user_app_dir/$id"
+  temporary=$(mktemp --suffix=.desktop)
+
+  escaped_name=${new_name//\/\\}
+  escaped_name=${escaped_name//$'\n'/\\n}
+  escaped_name=${escaped_name//$'\r'/}
+
+  if ! REPLACEMENT="$escaped_name" awk '
+    BEGIN { in_main = 0; replaced = 0 }
+    /^\[Desktop Entry\]$/ { in_main = 1 }
+    in_main && /^\[/ && $0 != "[Desktop Entry]" { in_main = 0 }
+    in_main && !replaced && /^Name=/ {
+      print "Name=" ENVIRON["REPLACEMENT"]
+      replaced = 1
+      next
+    }
+    { print }
+    END { if (!replaced) exit 1 }
+  ' "$source" > "$temporary"; then
+    rm -f "$temporary"
+    show_error "Could not rename ${app_name[$id]}."
+    return 1
+  fi
+
+  install -Dm644 "$temporary" "$target"
+  rm -f "$temporary"
+  refresh_menu
+}
+
+restore_entry() {
+  local id=$1 target="$user_app_dir/$1"
+
+  if [ -z "${default_source[$id]+set}" ]; then
+    show_error "${app_name[$id]} has no packaged name to restore."
+    return 1
+  fi
+
+  rm -f -- "$target"
+  refresh_menu
+}
+
+mkdir -p "$user_app_dir"
+scan_directory "$user_app_dir"
+scan_directory "$data_home/flatpak/exports/share/applications"
+
+IFS=: read -ra data_directories <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+for data_directory in "${data_directories[@]}"; do
+  scan_directory "$data_directory/applications"
+done
+
+if [ "${1:-}" = "--rename" ] && [ "$#" -eq 3 ]; then
+  [ -n "${app_source[$2]+set}" ] || { printf 'Unknown desktop entry: %s\n' "$2" >&2; exit 1; }
+  rename_entry "$2" "$3"
+  exit 0
+fi
+
+if [ "${1:-}" = "--restore" ] && [ "$#" -eq 2 ]; then
+  [ -n "${app_source[$2]+set}" ] || { printf 'Unknown desktop entry: %s\n' "$2" >&2; exit 1; }
+  restore_entry "$2"
+  exit 0
+fi
+
+rows=()
+while IFS= read -r id; do
+  rows+=("${app_name[$id]}" "$id")
+done < <(printf '%s\n' "${!app_source[@]}" | sort)
+
+selected=$(zenity --list \
+  --title="Rename Applications" \
+  --text="Choose an application" \
+  --width=720 --height=640 \
+  --column="Application" --column="Desktop ID" \
+  --hide-column=2 --print-column=2 \
+  "${rows[@]}") || exit 0
+
+action=$(zenity --question \
+  --title="Rename Applications" \
+  --text="Rename <b>${app_name[$selected]}</b> or restore its packaged name?" \
+  --ok-label="Rename" --extra-button="Restore Default" --cancel-label="Cancel") || exit 0
+
+if [ "$action" = "Restore Default" ]; then
+  restore_entry "$selected"
+  zenity --info --title="Rename Applications" --text="Restored the default application name."
+  exit 0
+fi
+
+new_name=$(zenity --entry \
+  --title="Rename Applications" \
+  --text="Enter the new launcher name" \
+  --entry-text="${app_name[$selected]}") || exit 0
+
+rename_entry "$selected" "$new_name"
+zenity --info --title="Rename Applications" --text="Renamed the application to <b>$new_name</b>."
